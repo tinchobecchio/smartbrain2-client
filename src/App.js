@@ -1,51 +1,13 @@
-import { useState } from 'react';
+import {  useState } from 'react';
 import './App.css';
 import ImageLinkForm from './components/ImageLinkForm/ImageLinkForm';
 import Logo from './components/Logo/Logo';
 import Navigation from './components/Navigation/Navigation';
 import Rank from './components/Rank/Rank';
-import ParticlesBg from 'particles-bg'
+// import ParticlesBg from 'particles-bg'
 import FaceRecognition from './components/FaceRecognition/FaceRecognition';
 import Signin from './components/Signin/Signin';
 import Register from './components/Register/Register';
-
-
-const returnClarifaiReqOpt = (imageURL) => {
-  
-  const PAT = 'd15812c4998344188ad1449d076d2488';
-  const USER_ID = 'clarifai';
-  const APP_ID = 'main';
-  const IMAGE_URL = imageURL;
-  
-  const raw = JSON.stringify({
-      "user_app_id": {
-          "user_id": USER_ID,
-          "app_id": APP_ID
-      },
-      "inputs": [
-          {
-              "data": {
-                  "image": {
-                      "url": IMAGE_URL
-                  }
-              }
-          }
-      ]
-  });
-
-  const requestOptions = {
-      method: 'POST',
-      headers: {
-          'Accept': 'application/json',
-          'Authorization': 'Key ' + PAT
-      },
-      body: raw
-  };
-  
-  return requestOptions
-}
-const CLARIFAI_URL = `https://api.clarifai.com/v2/models/face-detection/outputs`
-const PROXY_URL = "https://cors-anywhere.herokuapp.com/"; // esto es para que no salga el CORS despues sacarselo cuando haga la peticion desde el server ------------
 
 
 function App() {
@@ -54,10 +16,38 @@ function App() {
   const [ box, setBox ] = useState({})
   const [ route, setRoute ] = useState('signin')
   const [isSignedIn, setIsSignedIn] = useState(false)
+  const [user, setUser] = useState({
+    id: '',
+    name: '',
+    email: '',
+    entries: 0,
+    joined: ''
+  })
+
+  const loadUser = (data) => {
+    setUser({
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        entries: data.entries,
+        joined: data.joined
+    })
+  }
 
 const onRouteChange = (newRoute) => {
   if (newRoute === 'signout') {
+    setInput('')
+    setImgURL('')
+    setBox({})
+    setRoute('signin')
     setIsSignedIn(false)
+    setUser({
+      id: '',
+      name: '',
+      email: '',
+      entries: 0,
+      joined: ''
+    })
   } else if(newRoute === 'home') {
     setIsSignedIn(true)
   }
@@ -88,28 +78,56 @@ const onRouteChange = (newRoute) => {
 
   const onButtonSubmit = () => {
     setImgURL(input)
-    fetch(PROXY_URL + CLARIFAI_URL, returnClarifaiReqOpt(input))
+    fetch('https://smartbrain2-api.onrender.com/imageurl', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        url: input
+      })
+    })
       .then(response => response.json())
-      .then(result => displayFaceBox(calculateFaceLocation(result)))
+      .then(result => {
+        
+        if(result) {
+          fetch('https://smartbrain2-api.onrender.com/image', {
+            method: 'put',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              id: user.id
+            })
+          })
+            .then(resp => resp.json())
+            .then(count => {
+              setUser({
+                ...user,
+                entries: count
+              })
+            })
+            .catch(console.log)
+        }
+        
+        displayFaceBox(calculateFaceLocation(result))
+
+      })
       .catch(error => console.log('error', error));
   }
 
-
+ 
   return (
     <div className='App'>
-      <ParticlesBg type="circle" bg={true}/>
+      {/* <ParticlesBg type="circle" bg={true}/> */}
       <Navigation isSignedIn={isSignedIn} onRouteChange={onRouteChange}/>
       { route === 'home'
         ? <div>
             <Logo />
-            <Rank />
+            <Rank name={user.name} entries={user.entries}/>
             <ImageLinkForm onInputChange={onInputChange} onButtonSubmit={onButtonSubmit}/>
             {imgURL !== '' ? <FaceRecognition box={box} imgURL={imgURL}/>: ''}
           </div>
         : (
           route === 'signin'
-          ? <Signin onRouteChange={onRouteChange} /> 
-          : <Register onRouteChange={onRouteChange}/>
+          ? <Signin loadUser={loadUser} onRouteChange={onRouteChange} /> 
+          : <Register loadUser={loadUser} onRouteChange={onRouteChange}/>
         )  
       }
     </div>
